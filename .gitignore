@@ -1,0 +1,29 @@
+# Modèles IA — jamais pushés (trop lourds, sideload USB)
+*.litertlm
+*.tflite
+*.bin
+model_sideload/
+
+# Build
+build/
+app/build/
+.gradle/
+
+# Android local config
+local.properties
+*.keystore
+*.jks
+
+# Firebase (clés sensibles)
+google-services.json
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+captures/
+
+# OS
+.DS_Store
+Thumbs.db
