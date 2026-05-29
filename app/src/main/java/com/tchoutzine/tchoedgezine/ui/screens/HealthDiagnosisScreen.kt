@@ -316,6 +316,16 @@ private fun HealthResultCard(result: DiagnosisResult) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
+                if (!result.usedOnlineModel) {
+                    Box(
+                        modifier = Modifier.clip(RoundedCornerShape(99.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text("Mode démo", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.width(6.dp))
+                }
                 Box(
                     modifier = Modifier.clip(RoundedCornerShape(99.dp)).background(ForestGreen).padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {

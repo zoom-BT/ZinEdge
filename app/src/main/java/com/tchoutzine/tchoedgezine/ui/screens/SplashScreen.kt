@@ -72,8 +72,10 @@ fun SplashScreen(onReady: () -> Unit) {
                 onError    = { msg -> error = msg },
             )
 
-            kotlinx.coroutines.delay(600)
-            onReady()
+            if (error == null) {
+                kotlinx.coroutines.delay(600)
+                onReady()
+            }
         }
     }
 

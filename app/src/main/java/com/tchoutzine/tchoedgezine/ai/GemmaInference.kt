@@ -1,15 +1,19 @@
-﻿package com.tchoutzine.tchoedgezine.ai
+package com.tchoutzine.tchoedgezine.ai
 
 import android.content.Context
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import com.tchoutzine.tchoedgezine.data.model.DiagnosisResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class GemmaInference(private val context: Context) {
 
     private var llm: LlmInference? = null
+    private val initMutex = Mutex()
+
     var isReady = false
         private set
 
@@ -25,31 +29,20 @@ class GemmaInference(private val context: Context) {
             }
     }
 
-    /**
-     * Résolution du modèle — ordre de priorité :
-     *  1. filesDir/models/          (stockage interne, déjà copié)
-     *  2. getExternalFilesDir/models/ (copie USB sans permission)
-     *  3. assets/models/            (bundle dev/demo uniquement)
-     *
-     * Chemin USB : Android/data/com.tchoutzine.tchoedgezine/files/models/
-     */
     suspend fun prepareModel(
         onProgress: (stage: String, percent: Int) -> Unit,
     ): Boolean = withContext(Dispatchers.IO) {
-        // 1. Déjà installé en interne
         if (internalModelFile().exists()) {
             onProgress("Modèle prêt", 100)
             return@withContext true
         }
 
-        // 2. Stockage externe app-spécifique (USB sideload) — utilisé directement, sans copie
         val extFile = externalModelFile()
         if (extFile != null && extFile.exists()) {
             onProgress("Modèle trouvé (stockage externe)", 100)
             return@withContext true
         }
 
-        // 3. Assets (builds de dev avec modèle bundlé)
         val assetName = when {
             assetExists(MODEL_FILENAME)     -> MODEL_FILENAME
             assetExists(MODEL_FILENAME_E2B) -> MODEL_FILENAME_E2B
@@ -80,7 +73,6 @@ class GemmaInference(private val context: Context) {
         return null
     }
 
-    /** Dossier externe où déposer le fichier via USB (affiché dans SplashScreen). */
     fun externalModelDir(): File? =
         context.getExternalFilesDir(null)?.let { File(it, "models") }
 
@@ -89,21 +81,27 @@ class GemmaInference(private val context: Context) {
         onReady: () -> Unit,
         onError: (String) -> Unit,
     ) = withContext(Dispatchers.IO) {
+        // Idempotent : si déjà prêt, court-circuite sans recharger
+        val alreadyReady = initMutex.withLock {
+            if (isReady && llm != null) true
+            else { llm?.close(); llm = null; isReady = false; false }
+        }
+        if (alreadyReady) { onReady(); return@withContext }
+
         val modelFile = resolveModelFile()
         if (modelFile == null) { onError("Modèle introuvable"); return@withContext }
-        val path = modelFile.absolutePath
 
         try {
             val options = LlmInference.LlmInferenceOptions.builder()
-                .setModelPath(path)
-                .setMaxTokens(256)
+                .setModelPath(modelFile.absolutePath)
+                .setMaxTokens(1024)
                 .setTopK(10)
                 .setTemperature(0.1f)
                 .build()
 
             onProgress("Chargement Gemma 3n E4B…", 0)
-            llm = LlmInference.createFromOptions(context, options)
-            isReady = true
+            val instance = LlmInference.createFromOptions(context, options)
+            initMutex.withLock { llm = instance; isReady = true }
             onProgress("Modèle prêt", 100)
             onReady()
         } catch (e: Exception) {
@@ -111,7 +109,6 @@ class GemmaInference(private val context: Context) {
         }
     }
 
-    // ── Diagnostic santé ──────────────────────────────────────────────────
     suspend fun diagnoseHealth(symptoms: List<String>, imageDescription: String? = null): DiagnosisResult =
         withContext(Dispatchers.IO) {
             if (!isReady) return@withContext mockHealthResult()
@@ -120,7 +117,6 @@ class GemmaInference(private val context: Context) {
             parseJsonResult(raw) ?: mockHealthResult()
         }
 
-    // ── Détection cultures ───────────────────────────────────────────────
     suspend fun detectCrop(cropType: String, imageDescription: String? = null): DiagnosisResult =
         withContext(Dispatchers.IO) {
             if (!isReady) return@withContext mockCropResult()
@@ -129,7 +125,6 @@ class GemmaInference(private val context: Context) {
             parseJsonResult(raw) ?: mockCropResult()
         }
 
-    // ── Chat général ──────────────────────────────────────────────────────
     suspend fun chat(message: String): String = withContext(Dispatchers.IO) {
         if (!isReady) return@withContext "Modèle en cours de chargement…"
         try {
@@ -139,7 +134,11 @@ class GemmaInference(private val context: Context) {
         } catch (e: Exception) { "Erreur : ${e.message}" }
     }
 
-    fun release() { llm?.close(); llm = null; isReady = false }
+    fun release() {
+        llm?.close()
+        llm = null
+        isReady = false
+    }
 
     // ── Privé ─────────────────────────────────────────────────────────────
     private fun internalModelFile() = File(context.filesDir, "models/$MODEL_FILENAME")
@@ -181,7 +180,7 @@ class GemmaInference(private val context: Context) {
 Symptômes : ${symptoms.joinToString(", ")}
 ${if (imageDesc != null) "Zone examinée : $imageDesc" else ""}
 Fournir un diagnostic probable adapté au contexte africain.
-Répondre UNIQUEMENT en JSON :
+Répondre UNIQUEMENT en JSON valide, sans texte avant ou après :
 {"name":"...","detail":"...","confidence":94,"severity":"moderate","recommendations":["...","...","..."]}
 <end_of_turn>
 <start_of_turn>model
@@ -193,15 +192,36 @@ Répondre UNIQUEMENT en JSON :
 Culture : $cropType
 ${if (imageDesc != null) "Description image : $imageDesc" else ""}
 Identifier la maladie et proposer un traitement accessible localement.
-Répondre UNIQUEMENT en JSON :
+Répondre UNIQUEMENT en JSON valide, sans texte avant ou après :
 {"name":"...","detail":"...","confidence":91,"severity":"moderate","recommendations":["...","...","..."]}
 <end_of_turn>
 <start_of_turn>model
 """
 
+    // Parser JSON robuste avec suivi de profondeur (résiste aux accolades dans les valeurs)
+    private fun extractJsonObject(raw: String): String? {
+        val text = raw.trim()
+        val start = text.indexOf('{')
+        if (start < 0) return null
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for (i in start until text.length) {
+            val ch = text[i]
+            if (escaped) { escaped = false; continue }
+            if (ch == '\\') { escaped = true; continue }
+            if (ch == '"') { inString = !inString; continue }
+            if (!inString) {
+                if (ch == '{') depth++
+                if (ch == '}') { depth--; if (depth == 0) return text.substring(start, i + 1) }
+            }
+        }
+        return null
+    }
+
     private fun parseJsonResult(raw: String): DiagnosisResult? = try {
-        val s = raw.trim(); val i = s.indexOf('{'); val j = s.lastIndexOf('}')
-        val json = org.json.JSONObject(if (i >= 0 && j > i) s.substring(i, j + 1) else s)
+        val jsonText = extractJsonObject(raw) ?: return null
+        val json = org.json.JSONObject(jsonText)
         DiagnosisResult(
             name            = json.getString("name"),
             detail          = json.getString("detail"),
@@ -210,6 +230,7 @@ Répondre UNIQUEMENT en JSON :
             recommendations = json.getJSONArray("recommendations").let { arr ->
                 (0 until arr.length()).map { arr.getString(it) }
             },
+            usedOnlineModel = true,  // indique un vrai résultat IA (pas un mock)
         )
     } catch (_: Exception) { null }
 
@@ -217,6 +238,7 @@ Répondre UNIQUEMENT en JSON :
         name = "Paludisme P. falciparum",
         detail = "Plasmodium falciparum · Diagnostic probable",
         confidence = 94, severity = "moderate",
+        usedOnlineModel = false,
         recommendations = listOf(
             "Arteméther-luméfantrine 20/120 mg — 6 prises / 3 jours",
             "Test goutte épaisse au centre de santé le plus proche",
@@ -228,6 +250,7 @@ Répondre UNIQUEMENT en JSON :
         name = "Brûlure du maïs",
         detail = "Exserohilum turcicum · Northern Leaf Blight",
         confidence = 91, severity = "moderate",
+        usedOnlineModel = false,
         recommendations = listOf(
             "Retirer et brûler les feuilles infectées immédiatement",
             "Fongicide Mancozeb 80% WP — 2 kg/ha · 2 applications à 10 j",

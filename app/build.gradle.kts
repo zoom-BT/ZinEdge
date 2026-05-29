@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
-    alias(libs.plugins.google.services)
+    // alias(libs.plugins.google.services)  // Firebase retiré — non utilisé
 }
 
 android {
@@ -73,23 +73,14 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
-    // MediaPipe — Gemma 3n inference
+    // MediaPipe — Gemma 3n inference (tasks.vision non utilisé, retiré)
     implementation(libs.mediapipe.tasks.genai)
-    implementation(libs.mediapipe.tasks.vision)
-
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
     // Image loading
     implementation(libs.coil.compose)
-
-    // Camera / permissions
-    implementation(libs.accompanist.permissions)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

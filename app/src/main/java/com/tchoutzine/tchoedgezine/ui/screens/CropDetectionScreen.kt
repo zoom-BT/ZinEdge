@@ -277,15 +277,26 @@ private fun CropDiseaseCard(result: DiagnosisResult) {
                         )
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(severityColor.copy(0.15f))
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(Icons.Outlined.Warning, null, tint = severityColor, modifier = Modifier.size(13.dp))
-                        Text(severityLabel, color = severityColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(severityColor.copy(0.15f))
+                            .padding(horizontal = 9.dp, vertical = 4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Outlined.Warning, null, tint = severityColor, modifier = Modifier.size(13.dp))
+                            Text(severityLabel, color = severityColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    if (!result.usedOnlineModel) {
+                        Box(
+                            modifier = Modifier.clip(RoundedCornerShape(99.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text("Mode démo", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
